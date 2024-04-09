@@ -10,8 +10,8 @@ use std::os::raw::c_char;
 use std::str::from_utf8;
 
 use paste::paste;
-use xiapi_sys::*;
 use xiapi_sys::XI_RET::XI_INVALID_ARG;
+use xiapi_sys::*;
 
 use crate::Image;
 use crate::Roi;
@@ -301,7 +301,7 @@ impl ParamType for u64 {
             prm,
             value as *mut _ as *mut std::os::raw::c_void,
             &mut size,
-            &mut xi_type_integer64
+            &mut xi_type_integer64,
         )
     }
 
@@ -310,7 +310,8 @@ impl ParamType for u64 {
             handle,
             prm,
             &value as *const _ as *mut std::os::raw::c_void,
-            std::mem::size_of::<Self>() as DWORD, XI_PRM_TYPE::xiTypeInteger64
+            std::mem::size_of::<Self>() as DWORD,
+            XI_PRM_TYPE::xiTypeInteger64,
         )
     }
 }
@@ -477,8 +478,7 @@ impl Camera {
     /// Set the size of the acquisition buffer in bytes.
     /// For buffer sizes larger than 2GB the actual value may be slightly larger than specified.
     /// Returns the actual value set to the camera.
-    pub fn set_acq_buffer_size(&mut self, size_in_bytes: usize) -> Result<usize,XI_RETURN>{
-
+    pub fn set_acq_buffer_size(&mut self, size_in_bytes: usize) -> Result<usize, XI_RETURN> {
         if size_in_bytes == 0 {
             // Acquisition buffer size can't be zero
             return Err(XI_INVALID_ARG as XI_RETURN);
@@ -486,7 +486,7 @@ impl Camera {
 
         let max_param_value = unsafe {
             match self.param_max::<i32>(XI_PRM_ACQ_BUFFER_SIZE) {
-                Ok(size) => {size}
+                Ok(size) => size,
                 Err(_err) => {
                     // This should never happen
                     debug_assert!(false, "Could not get maximum acq buffer size, Error:{_err}");
@@ -496,7 +496,10 @@ impl Camera {
             }
         };
 
-        assert_ne!(max_param_value, 0, "xiAPI reports maximum buffer size of zero");
+        assert_ne!(
+            max_param_value, 0,
+            "xiAPI reports maximum buffer size of zero"
+        );
 
         let unit_value = size_in_bytes.div_ceil(max_param_value as usize);
         let size_value = size_in_bytes.div_ceil(unit_value);
@@ -506,8 +509,7 @@ impl Camera {
             self.set_param(XI_PRM_ACQ_BUFFER_SIZE, size_value as i32)?;
         }
 
-        Ok(size_value*unit_value)
-
+        Ok(size_value * unit_value)
     }
 
     /// Size of the acquisition buffer in bytes
@@ -516,7 +518,6 @@ impl Camera {
         let unit = unsafe { self.param::<i32>(XI_PRM_ACQ_BUFFER_SIZE_UNIT) }?;
         Ok(size as usize * unit as usize)
     }
-
 
     param! {
         /// Current exposure time in microseconds.
@@ -690,6 +691,28 @@ impl Camera {
 
         /// Configures image data delivery target to CPU RAM (default) or GPU RAM.
         mut transport_data_target: XI_TRANSPORT_DATA_TARGET_MODE::Type;
+
+        // lens mode
+        mut lens_mode: XI_SWITCH::Type;
+
+        // lens aparture value
+        mut lens_aperture_value: f32;
+
+        // lens aperture index
+        mut lens_aperture_index: i32;
+
+        // lens focus movement value
+        mut lens_focus_movement_value: i32;
+
+        // lens focus move
+        mut lens_focus_move: XI_SWITCH::Type;
+
+        // lens focal length
+        mut lens_focal_length: f32;
+
+        // lens feature selector
+        mut lens_feature_selector: XI_LENS_FEATURE::Type;
+
     }
 }
 
@@ -706,8 +729,7 @@ impl Deref for Camera {
     }
 }
 
-unsafe impl Send for Camera {
-}
+unsafe impl Send for Camera {}
 
 impl AcquisitionBuffer {
     /// Stop the image acquisition.
@@ -742,19 +764,13 @@ impl AcquisitionBuffer {
             xi_img,
             pix_type: PhantomData::default(),
         };
-        let ret = unsafe {
-            xiapi_sys::xiGetImage(self.camera.device_handle, timeout, &mut image.xi_img)
-        };
+        let ret =
+            unsafe { xiapi_sys::xiGetImage(self.camera.device_handle, timeout, &mut image.xi_img) };
 
-        match ret as XI_RET::Type{
-            XI_RET::XI_OK => {
-                Ok(image)
-            }
-            x => {
-               Err(x as XI_RETURN)
-            }
+        match ret as XI_RET::Type {
+            XI_RET::XI_OK => Ok(image),
+            x => Err(x as XI_RETURN),
         }
-
     }
 
     /// Send a software trigger signal to the camera.
@@ -778,6 +794,4 @@ impl AcquisitionBuffer {
     }
 }
 
-unsafe impl Send for AcquisitionBuffer{
-
-}
+unsafe impl Send for AcquisitionBuffer {}
